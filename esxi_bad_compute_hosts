@@ -55,6 +55,8 @@ for build in builds[:14]:
         matches = search_error_pattern(build["log_url"])
         if not matches:
             print("not matches for log_url: {log_url}".format(log_url=build["log_url"]))
+            print("The failure may not be an hypervisor stability problem. We ignore it.")
+            continue
     inventory = get_inventory(build["log_url"])
     cloud = inventory["all"]["hosts"]["esxi1"]["nodepool"]["cloud"]
     region = inventory["all"]["hosts"]["esxi1"]["nodepool"]["az"]
