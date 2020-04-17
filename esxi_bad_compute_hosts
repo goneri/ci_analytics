@@ -43,7 +43,7 @@ r = requests.get(url)
 builds = r.json()
 results_by_host_id = {}
 host_by_host_id = {}
-for build in builds[:14]:
+for build in builds:
     age = datetime.utcnow() - dateutil.parser.parse(build["end_time"])
     if age.days > 2:
         continue
