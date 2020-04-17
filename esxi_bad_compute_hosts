@@ -48,7 +48,7 @@ for build in builds:
     if age.days > 2:
         continue
     # print(age)
-    if build["result"] == "SKIPPED":
+    if build["result"] in ("RETRY_LIMIT", "SKIPPED"):
         continue
     matches = None
     if build["result"] == "FAILURE":
