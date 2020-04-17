@@ -55,7 +55,9 @@ for build in builds:
         matches = search_error_pattern(build["log_url"])
         if not matches:
             print("not matches for log_url: {log_url}".format(log_url=build["log_url"]))
-            print("The failure may not be an hypervisor stability problem. We ignore it.")
+            print(
+                "The failure may not be an hypervisor stability problem. We ignore it."
+            )
             continue
     inventory = get_inventory(build["log_url"])
     cloud = inventory["all"]["hosts"]["esxi1"]["nodepool"]["cloud"]
@@ -78,7 +80,7 @@ for host_id in results_by_host_id.keys():
     )
     if rate > 0.7:
         continue
-    print("name (rate={rate})".format(name=host_by_host_id[host_id], rate=rate))
+    print("name={name} (rate={rate})".format(name=host_by_host_id[host_id], rate=rate))
 
 print("GOOD HOSTS")
 for host_id in results_by_host_id.keys():
@@ -90,4 +92,4 @@ for host_id in results_by_host_id.keys():
         continue
     if len(results_by_host_id[host_id]["SUCCESS"]) < 2:
         continue
-    print("name (rate={rate})".format(name=host_by_host_id[host_id], rate=rate))
+    print("name={name} (rate={rate})".format(name=host_by_host_id[host_id], rate=rate))
