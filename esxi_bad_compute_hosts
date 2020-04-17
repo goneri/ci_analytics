@@ -1,0 +1,91 @@
+#!/usr/bin/env python3
+
+from pprint import pprint
+import re
+import requests
+import yaml
+import dateutil.parser
+from datetime import datetime
+
+COMMON_PATTERNS = (
+    (
+        "HOST_KAPUT",
+        re.compile(r"'An error occurred while communicating with the remote host.'"),
+    ),
+    (
+        "HOST_KAPUT",
+        re.compile(
+            r"'Unable to communicate with the remote host, since it is disconnected.'"
+        ),
+    ),
+)
+
+
+def get_inventory(log_url):
+    r = requests.get(log_url + "zuul-info/inventory.yaml")
+    return yaml.safe_load(r.text)
+
+
+def search_error_pattern(log_url):
+    founds = {}
+    r = requests.get(log_url + "job-output.txt")
+    for l in r.text.splitlines():
+        for name, pattern in COMMON_PATTERNS:
+            if pattern.search(l):
+                if name not in founds:
+                    founds[name] = 0
+                founds[name] += 1
+    return founds
+
+
+url = "https://dashboard.zuul.ansible.com/api/tenant/ansible/builds?job_name=ansible-test-cloud-integration-vcenter_1esxi_with_nested-python36"
+r = requests.get(url)
+builds = r.json()
+results_by_host_id = {}
+host_by_host_id = {}
+for build in builds[:14]:
+    age = datetime.utcnow() - dateutil.parser.parse(build["end_time"])
+    if age.days > 2:
+        continue
+    # print(age)
+    if build["result"] == "SKIPPED":
+        continue
+    matches = None
+    if build["result"] == "FAILURE":
+        matches = search_error_pattern(build["log_url"])
+        if not matches:
+            print("not matches for log_url: {log_url}".format(log_url=build["log_url"]))
+    inventory = get_inventory(build["log_url"])
+    cloud = inventory["all"]["hosts"]["esxi1"]["nodepool"]["cloud"]
+    region = inventory["all"]["hosts"]["esxi1"]["nodepool"]["az"]
+    host_id = inventory["all"]["hosts"]["esxi1"]["nodepool"]["host_id"]
+    if host_id not in results_by_host_id:
+        host_by_host_id[host_id] = "{cloud}-{region}-{host_id}".format(
+            cloud=cloud, region=region, host_id=host_id
+        )
+        results_by_host_id[host_id] = {"SUCCESS": [], "FAILURE": []}
+    results_by_host_id[host_id][build["result"]].append(
+        {"log_url": build["log_url"], "matches": matches}
+    )
+
+print("BAD HOSTS")
+for host_id in results_by_host_id.keys():
+    rate = len(results_by_host_id[host_id]["SUCCESS"]) / (
+        len(results_by_host_id[host_id]["SUCCESS"])
+        + len(results_by_host_id[host_id]["FAILURE"])
+    )
+    if rate > 0.7:
+        continue
+    print(host_by_host_id[host_id])
+
+print("GOOD HOSTS")
+for host_id in results_by_host_id.keys():
+    rate = len(results_by_host_id[host_id]["SUCCESS"]) / (
+        len(results_by_host_id[host_id]["SUCCESS"])
+        + len(results_by_host_id[host_id]["FAILURE"])
+    )
+    if rate < 0.9:
+        continue
+    if len(results_by_host_id[host_id]["SUCCESS"]) < 2:
+        continue
+    print(host_by_host_id[host_id])
