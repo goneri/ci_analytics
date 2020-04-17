@@ -78,7 +78,7 @@ for host_id in results_by_host_id.keys():
     )
     if rate > 0.7:
         continue
-    print(host_by_host_id[host_id])
+    print("name (rate={rate})".format(name=host_by_host_id[host_id], rate=rate))
 
 print("GOOD HOSTS")
 for host_id in results_by_host_id.keys():
@@ -90,4 +90,4 @@ for host_id in results_by_host_id.keys():
         continue
     if len(results_by_host_id[host_id]["SUCCESS"]) < 2:
         continue
-    print(host_by_host_id[host_id])
+    print("name (rate={rate})".format(name=host_by_host_id[host_id], rate=rate))
