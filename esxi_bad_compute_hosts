@@ -42,12 +42,14 @@ url = "https://dashboard.zuul.ansible.com/api/tenant/ansible/builds?job_name=ans
 r = requests.get(url)
 builds = r.json()
 results_by_host_id = {}
+results_by_region = {}
+results_by_age = {}
 host_by_host_id = {}
 for build in builds:
-    age = datetime.utcnow() - dateutil.parser.parse(build["end_time"])
-    if age.days > 2:
+    delta = datetime.utcnow() - dateutil.parser.parse(build["end_time"])
+    age = int(delta.seconds / 3600)
+    if age > 48:
         continue
-    # print(age)
     if build["result"] in ("RETRY_LIMIT", "SKIPPED"):
         continue
     matches = None
@@ -72,24 +74,62 @@ for build in builds:
         {"log_url": build["log_url"], "matches": matches}
     )
 
+    if region not in results_by_region:
+        results_by_region[region] = {"SUCCESS": [], "FAILURE": []}
+    results_by_region[region][build["result"]].append(
+        {"log_url": build["log_url"], "matches": matches}
+    )
+
+    if age not in results_by_age:
+        results_by_age[age] = {"SUCCESS": [], "FAILURE": []}
+    results_by_age[age][build["result"]].append(
+        {"log_url": build["log_url"], "matches": matches}
+    )
+
+
+    print(
+        "name={name} result={result}".format(
+            name=host_by_host_id[host_id], result=build["result"]
+        )
+    )
+
 print("BAD HOSTS")
 for host_id in results_by_host_id.keys():
+    if len(results_by_host_id[host_id]["SUCCESS"]) < 2:
+        # Not enough metrics
+        continue
+
     rate = len(results_by_host_id[host_id]["SUCCESS"]) / (
         len(results_by_host_id[host_id]["SUCCESS"])
         + len(results_by_host_id[host_id]["FAILURE"])
     )
-    if rate > 0.7:
-        continue
-    print("name={name} (rate={rate})".format(name=host_by_host_id[host_id], rate=rate))
+
+    if rate < 0.9:
+        print(
+            "name={name} (rate={rate})".format(name=host_by_host_id[host_id], rate=rate)
+        )
 
 print("GOOD HOSTS")
 for host_id in results_by_host_id.keys():
+    if len(results_by_host_id[host_id]["SUCCESS"]) < 2:
+        # Not enough metrics
+        continue
+
     rate = len(results_by_host_id[host_id]["SUCCESS"]) / (
         len(results_by_host_id[host_id]["SUCCESS"])
         + len(results_by_host_id[host_id]["FAILURE"])
     )
-    if rate < 0.9:
-        continue
-    if len(results_by_host_id[host_id]["SUCCESS"]) < 2:
-        continue
-    print("name={name} (rate={rate})".format(name=host_by_host_id[host_id], rate=rate))
+    if rate > 0.9:
+        print(
+            "name={name} (rate={rate})".format(name=host_by_host_id[host_id], rate=rate)
+        )
+
+print("BY ZONE")
+for region, values in results_by_region.items():
+    rate = len(values["SUCCESS"]) / (len(values["SUCCESS"]) + len(values["FAILURE"]))
+    print("region={region} (rate={rate})".format(region=region, rate=rate))
+
+print("BY AGE")
+for age, values in results_by_age.items():
+    rate = len(values["SUCCESS"]) / (len(values["SUCCESS"]) + len(values["FAILURE"]))
+    print("age={age}h (rate={rate})".format(age=age, rate=rate))
