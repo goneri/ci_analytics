@@ -7,7 +7,7 @@ import yaml
 import dateutil.parser
 from datetime import datetime
 
-MAX_HOURS=24
+MAX_HOURS = 24
 
 COMMON_PATTERNS = (
     (
@@ -30,13 +30,30 @@ def get_inventory(log_url):
 
 def search_error_pattern(log_url):
     founds = {}
+    failure_in_re = re.compile(
+        ".*NOTICE: To resume at this test target, use the option: --start-at (\S+)"
+    )
     r = requests.get(log_url + "job-output.txt")
+
+    task_path = None
+
     for l in r.text.splitlines():
+        if "task path:" in l:
+            task_path = l.split(
+                "/home/zuul/.ansible/collections/ansible_collections/community/vmware/"
+            )[-1]
+
         for name, pattern in COMMON_PATTERNS:
             if pattern.search(l):
                 if name not in founds:
                     founds[name] = 0
+                    founds["task_path"] = task_path
+
                 founds[name] += 1
+            m = failure_in_re.search(l)
+            if m:
+                founds["failure_in"] = m.group(1)
+
     return founds
 
 
@@ -48,6 +65,7 @@ results_by_region = {}
 results_by_age = {}
 host_by_host_id = {}
 for build in builds:
+    print("⏭️")
     delta = datetime.utcnow() - dateutil.parser.parse(build["end_time"])
     age = int(delta.seconds / 3600)
     if build["result"] in ("RETRY_LIMIT", "SKIPPED"):
@@ -61,6 +79,7 @@ for build in builds:
                 "The failure may not be an hypervisor stability problem. We ignore it."
             )
             continue
+
     inventory = get_inventory(build["log_url"])
     cloud = inventory["all"]["hosts"]["esxi1"]["nodepool"]["cloud"]
     region = inventory["all"]["hosts"]["esxi1"]["nodepool"]["az"]
@@ -95,6 +114,7 @@ for build in builds:
             name=host_by_host_id[host_id], result=build["result"]
         )
     )
+
 
 print("BAD HOSTS (for last {max_hours})".format(max_hours=MAX_HOURS))
 for host_id in results_by_host_id.keys():
@@ -136,6 +156,10 @@ print("BY AGE")
 for age in sorted(results_by_age):
     values = results_by_age[age]
     rate = len(values["SUCCESS"]) / (len(values["SUCCESS"]) + len(values["FAILURE"]))
-    print("age={age}h (rate={rate})".format(age=age, rate=rate, failures=values["FAILURE"]))
+    print(
+        "⏰ {age}h ago (rate={rate})".format(
+            age=age, rate=rate, failures=values["FAILURE"]
+        )
+    )
     for failure in values["FAILURE"]:
         print("    - {failure})".format(age=age, rate=rate, failure=failure))
