@@ -1,0 +1,70 @@
+#!/usr/bin/env python3
+
+from pprint import pprint
+import re
+import requests
+import yaml
+import dateutil.parser
+from datetime import datetime
+
+MAX_HOURS = 72
+
+def last_task_failure(log_url):
+    r = requests.get(log_url + "job-output.json")
+    for playbook in r.json():
+        failures = sum([int(h["failures"]) for h in playbook["stats"].values()])
+        if not failures:
+            continue
+        playbook_path = playbook["playbook"]
+        for play in playbook["plays"]:
+            for task in play["tasks"]:
+                has_failed = any([r.get("failed") for r in task["hosts"].values()])
+                if has_failed:
+                    for host, result in task["hosts"].items():
+                        if not result.get("failed"):
+                            continue
+                        print("{host}: {name}, playbook={playbook_path}".format(host=host, name=task["task"]["name"], playbook_path=playbook_path))
+                    return
+
+
+def get_inventory(log_url):
+    r = requests.get(log_url + "zuul-info/inventory.yaml")
+    return yaml.safe_load(r.text)
+
+
+def iter_builds():
+    jobs = [
+        "ansible-test-cloud-integration-vcenter_1esxi_without_nested-python36_1_of_2",
+        "ansible-test-cloud-integration-vcenter_1esxi_without_nested-python36_2_of_2",
+        "ansible-test-cloud-integration-vcenter_1esxi_with_nested-python36",
+        "ansible-test-cloud-integration-vcenter_2esxi_without_nested-python36",
+    ]
+    for job in jobs:
+        url_template = "https://dashboard.zuul.ansible.com/api/tenant/ansible/builds?job_name={job}&limit=30"
+        r = requests.get(url_template.format(job=job))
+        builds = r.json()
+        for build in builds:
+            yield build
+
+
+for build in iter_builds():
+    delta = datetime.utcnow() - dateutil.parser.parse(build["end_time"])
+    age = int(delta.seconds / 3600)
+    if age > MAX_HOURS:
+        continue
+
+    if build["result"] != "RETRY_LIMIT":
+        continue
+
+    last_task_failure(build["log_url"])
+    inventory = get_inventory(build["log_url"])
+    change_url = inventory["all"]["vars"]["zuul"]["change_url"]
+    cloud = inventory["all"]["hosts"]["esxi1"]["nodepool"]["cloud"]
+    region = inventory["all"]["hosts"]["esxi1"]["nodepool"]["az"]
+    host_id = inventory["all"]["hosts"]["esxi1"]["nodepool"]["host_id"]
+
+    print("host: {cloud}-{region}-{host_id}".format(
+            cloud=cloud, region=region, host_id=host_id
+            ))
+    print("Change: {change_url}".format(change_url=change_url))
+    print("")
