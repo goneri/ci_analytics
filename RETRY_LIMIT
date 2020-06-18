@@ -6,8 +6,9 @@ import requests
 import yaml
 import dateutil.parser
 from datetime import datetime
+from datetime import timezone
 
-MAX_HOURS = 72
+MAX_HOURS = 12
 
 def last_task_failure(log_url):
     r = requests.get(log_url + "job-output.json")
@@ -48,14 +49,15 @@ def iter_builds():
 
 
 for build in iter_builds():
-    delta = datetime.utcnow() - dateutil.parser.parse(build["end_time"])
-    age = int(delta.seconds / 3600)
+    delta = datetime.now(timezone.utc) - dateutil.parser.parse(build["end_time"] + 'Z')
+    age = int(delta.total_seconds() / 3600)
     if age > MAX_HOURS:
         continue
 
     if build["result"] != "RETRY_LIMIT":
         continue
 
+    print("Log URL: {}".format(build["log_url"]))
     last_task_failure(build["log_url"])
     inventory = get_inventory(build["log_url"])
     change_url = inventory["all"]["vars"]["zuul"]["change_url"]

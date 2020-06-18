@@ -8,12 +8,12 @@ import dateutil.parser
 from datetime import datetime
 from datetime import timezone
 
-MAX_HOURS = 24
+MAX_HOURS = 12
 
 COMMON_PATTERNS = (
     (
-        "HOST_KAPUT",
-        re.compile(r"'An error occurred while communicating with the remote host.'"),
+        "MISSING_TAGGING_SERVICE",
+        re.compile(r"Cannot find service 'com.vmware.cis.tagging.category'"),
     ),
     (
         "HOST_KAPUT",
@@ -96,23 +96,22 @@ for build in iter_builds():
         continue
     matches = None
     if build["result"] == "FAILURE":
+        matches = search_error_pattern(build["log_url"])
+        if "MISSING_TAGGING_SERVICE" not in matches:
+#            print("not matches for log_url: {log_url}".format(log_url=build["log_url"]))
+#            print(
+#                (
+#                    "The failure may not be an hypervisor stability problem. We "
+#                    "ignore it. ({failure_in} at {task_path})"
+#                ).format(
+#                    failure_in=matches.get("failure_in"),
+#                    task_path=matches.get("task_path"),
+#                )
+#            )
+            continue
         print("** https://github.com/ansible-collections/vmware/pull/{change}".format(
                 **build
                 ))
-
-        matches = search_error_pattern(build["log_url"])
-        if "HOST_KAPUT" not in matches:
-            print("not matches for log_url: {log_url}".format(log_url=build["log_url"]))
-            print(
-                (
-                    "The failure may not be an hypervisor stability problem. We "
-                    "ignore it. ({failure_in} at {task_path})"
-                ).format(
-                    failure_in=matches.get("failure_in"),
-                    task_path=matches.get("task_path"),
-                )
-            )
-            continue
         print("Match: {log_url}".format(log_url=build["log_url"]))
 
     if not build["log_url"]:
@@ -201,7 +200,7 @@ for age in sorted(results_by_age):
 for job in current.values():
     if not job["matches"]:
         continue
-    if "HOST_KAPUT" in job["matches"]:
+    if "MISSING_TAGGING_SERVICE" in job["matches"]:
         print(
             "Restart: https://github.com/ansible-collections/vmware/pull/{change}".format(
                 **job["build"]
