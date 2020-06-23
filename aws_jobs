@@ -1,0 +1,62 @@
+#!/usr/bin/env python3
+
+from pprint import pprint
+import re
+import requests
+import yaml
+import dateutil.parser
+from datetime import datetime
+from datetime import timezone
+
+MAX_HOURS = 12
+
+def last_task_failure(log_url):
+    r = requests.get(log_url + "job-output.json")
+    for playbook in r.json():
+        failures = sum([int(h["failures"]) for h in playbook["stats"].values()])
+        if not failures:
+            continue
+        playbook_path = playbook["playbook"]
+        for play in playbook["plays"]:
+            for task in play["tasks"]:
+                has_failed = any([r.get("failed") for r in task["hosts"].values()])
+                if has_failed:
+                    for host, result in task["hosts"].items():
+                        if not result.get("failed"):
+                            continue
+                        print("{host}: {name}, playbook={playbook_path}".format(host=host, name=task["task"]["name"], playbook_path=playbook_path))
+                    return
+
+
+def get_inventory(log_url):
+    r = requests.get(log_url + "zuul-info/inventory.yaml")
+    return yaml.safe_load(r.text)
+
+
+def iter_builds():
+    url_template = "https://dashboard.zuul.ansible.com/api/tenant/ansible/builds?limit=100"
+    r = requests.get(url_template.format())
+    builds = r.json()
+    for build in builds:
+        yield build
+
+
+for build in iter_builds():
+    delta = datetime.now(timezone.utc) - dateutil.parser.parse(build["end_time"] + 'Z')
+    age = int(delta.total_seconds() / 3600)
+    if age > MAX_HOURS:
+        continue
+
+    if build["result"] == "SUCCESS":
+        continue
+
+    inventory = get_inventory(build["log_url"])
+    change_url = inventory["all"]["vars"]["zuul"]["change_url"]
+    hosts = list(inventory["all"]["hosts"].values())
+    ec2_hosts = [h for h in hosts if h["nodepool"]["provider"].startswith("ec2-")]
+    if not ec2_hosts:
+        continue
+
+    last_task_failure(build["log_url"])
+    print("Log URL: {}".format(build["log_url"]))
+    print("Change URL: {}".format(change_url))
