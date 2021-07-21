@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 
-from pprint import pprint
 import re
 import requests
-import yaml
 import dateutil.parser
 import datetime
 
@@ -14,6 +12,7 @@ def show_durations(lines):
     cur_target_name = None
     target_started_at = None
     whole_duration = datetime.timedelta()
+    expectation = datetime.timedelta(minutes=10)
 
     for line in lines:
         m = re.match(
@@ -32,9 +31,10 @@ def show_durations(lines):
         elif cur_target_name != target:
             duration = date - target_started_at
             whole_duration += duration
-            print(
-                f"  🎯 {cur_target_name} lasted {int(duration.total_seconds())} second(s)"
-            )
+            if duration > expectation:
+                print(
+                    f"  🎯 {cur_target_name} lasted {int(duration.total_seconds())} seconds."
+                )
             cur_target_name = target
             target_started_at = date
         else:
