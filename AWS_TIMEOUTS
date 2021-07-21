@@ -14,42 +14,48 @@ def show_durations(lines):
     cur_target_name = None
     target_started_at = None
     whole_duration = datetime.timedelta()
-    
+
     for line in lines:
-        m = re.match(r'(?P<date>^2\d\d\d-\d\d-\d\d [\d:]+.\d+)\s\|\s\S+\s\|\stask path.*tests/integration/targets/(?P<target>\w+)/tasks', line)
+        m = re.match(
+            r"(?P<date>^2\d\d\d-\d\d-\d\d [\d:]+.\d+)\s\|\s\S+\s\|\stask path.*tests/integration/targets/(?P<target>\w+)/tasks",
+            line,
+        )
         if not m:
             continue
         fields = m.groupdict()
         date = datetime.datetime.strptime(fields["date"], "%Y-%m-%d %H:%M:%S.%f")
         target = fields["target"]
-    
+
         if not cur_target_name:
             cur_target_name = target
             target_started_at = date
         elif cur_target_name != target:
             duration = date - target_started_at
             whole_duration += duration
-            print(f"  🎯 {cur_target_name} lasted {int(duration.total_seconds())} second(s)")
+            print(
+                f"  🎯 {cur_target_name} lasted {int(duration.total_seconds())} second(s)"
+            )
             cur_target_name = target
             target_started_at = date
         else:
             continue
-    
+
     print(f" ⌛ All the targets took {whole_duration} to run.")
+
 
 def iter_builds():
     jobs = [
-            "ansible-test-cloud-integration-aws-py36_0",
-            "ansible-test-cloud-integration-aws-py36_1",
-            "ansible-test-cloud-integration-aws-py36_2",
-            "ansible-test-cloud-integration-aws-py36_3",
-            "ansible-test-cloud-integration-aws-py36_4",
-            "ansible-test-cloud-integration-aws-py36_5",
-            "ansible-test-cloud-integration-aws-py36_6",
-            "ansible-test-cloud-integration-aws-py36_7",
-            "ansible-test-cloud-integration-aws-py36_8",
-            "ansible-test-cloud-integration-aws-py36_9",
-            ]
+        "ansible-test-cloud-integration-aws-py36_0",
+        "ansible-test-cloud-integration-aws-py36_1",
+        "ansible-test-cloud-integration-aws-py36_2",
+        "ansible-test-cloud-integration-aws-py36_3",
+        "ansible-test-cloud-integration-aws-py36_4",
+        "ansible-test-cloud-integration-aws-py36_5",
+        "ansible-test-cloud-integration-aws-py36_6",
+        "ansible-test-cloud-integration-aws-py36_7",
+        "ansible-test-cloud-integration-aws-py36_8",
+        "ansible-test-cloud-integration-aws-py36_9",
+    ]
     for job in jobs:
         url = f"https://dashboard.zuul.ansible.com/api/tenant/ansible/builds?job_name={job}&limit=30"
         r = requests.get(url)
@@ -57,9 +63,12 @@ def iter_builds():
         for build in builds:
             yield build
 
+
 print(f"Looking for AWS jobs that timeouted during the last {MAX_HOURS} hours...")
 for build in iter_builds():
-    delta = datetime.datetime.now(datetime.timezone.utc) - dateutil.parser.parse(build["end_time"] + 'Z')
+    delta = datetime.datetime.now(datetime.timezone.utc) - dateutil.parser.parse(
+        build["end_time"] + "Z"
+    )
     age = int(delta.total_seconds() / 3600)
     if age > MAX_HOURS:
         continue
@@ -70,5 +79,5 @@ for build in iter_builds():
     job_output_url = f"{build['log_url']}/job-output.txt"
     print(f"🧪 Log URL: {job_output_url}")
 
-    r_content =  requests.get(job_output_url)
+    r_content = requests.get(job_output_url)
     show_durations(r_content.text.split("\n"))
