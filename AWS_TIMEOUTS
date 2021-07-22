@@ -28,7 +28,7 @@ def show_durations(lines):
         if not cur_target_name:
             cur_target_name = target
             target_started_at = date
-        elif cur_target_name != target:
+        elif cur_target_name != target or "RESULT_TIMED_OUT" in line:
             duration = date - target_started_at
             whole_duration += duration
             if duration > expectation:
