@@ -33,8 +33,10 @@ def show_durations(lines):
             whole_duration += duration
             if duration > expectation:
                 print(
-                    f"  🎯 {cur_target_name} lasted {int(duration.total_seconds())} seconds."
+                    f"  🎯 {cur_target_name} lasted {int(duration.total_seconds())} seconds, from {target_started_at.strftime('%H:%M:%S')} to {date.strftime('%H:%M:%S')}."
                 )
+            if cur_target_name == "setup_remote_tmp_dir":
+                print("⚠️ setup_remote_tmp_dir is just a wrapper.")
             cur_target_name = target
             target_started_at = date
         else:
